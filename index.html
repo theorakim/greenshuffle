@@ -13,6 +13,17 @@
   .stage img { max-width:100%; max-height:100%; width:auto; height:auto; object-fit:contain; display:block;
                opacity:0; transition:opacity .45s ease; }
   .stage img.on { opacity:1; }
+  .loader { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; gap:14px;
+            transition:opacity .6s ease; pointer-events:none; }
+  .loader.done { opacity:0; }
+  .loader i { width:9px; height:9px; border-radius:50%; background:#7fb77e;
+              animation:breathe 1.4s ease-in-out infinite; }
+  .loader i:nth-child(2) { animation-delay:.18s; background:#5f9e6e; }
+  .loader i:nth-child(3) { animation-delay:.36s; background:#3f8560; }
+  @keyframes breathe {
+    0%, 100% { transform:translateY(0) scale(.7); opacity:.35; }
+    40%      { transform:translateY(-7px) scale(1); opacity:1; }
+  }
   .credit { position:fixed; left:0; right:0; bottom:0; height:28px; display:flex; align-items:center; justify-content:center;
             padding:0 16px; font:11px/1.2 "IBM Plex Mono", ui-monospace, Menlo, monospace; letter-spacing:.01em; }
   .credit a { color:var(--fg); text-decoration:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; cursor:alias; }
@@ -21,6 +32,7 @@
 </style>
 </head>
 <body>
+<div class="loader" id="loader"><i></i><i></i><i></i></div>
 <div class="stage"><img id="pic" alt=""></div>
 <div class="credit"><a id="credit" target="_blank" rel="noopener"></a></div>
 <script>
@@ -1093,6 +1105,7 @@ const ITEMS = [
 
 const pic = document.getElementById('pic');
 const credit = document.getElementById('credit');
+const loader = document.getElementById('loader');
 let bag = [], history = [], pos = -1;
 
 // draw without repeats until every image has been shown once
@@ -1118,6 +1131,7 @@ function show(idx) {
       credit.append(it.cap + '  ');
       const s = document.createElement('span'); s.className = 'src'; s.textContent = '· ' + it.srcName; credit.append(s);
       requestAnimationFrame(() => pic.classList.add('on'));
+      loader.classList.add('done');
     }, pic.src ? 200 : 0);
   };
   next.onerror = () => { forward(); };   // skip dead links

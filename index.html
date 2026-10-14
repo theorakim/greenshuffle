@@ -1658,12 +1658,44 @@ function draw() {
   return bag.pop();
 }
 
+// pick one representative color from the painting and tell the embedding page (byminseok.com home)
+const embedded = window.parent !== window;
+const swatch = document.createElement('canvas');
+function pickColor(img) {
+  try {
+    const W = 48, H = Math.max(1, Math.round(48 * img.naturalHeight / img.naturalWidth));
+    swatch.width = W; swatch.height = H;
+    const ctx = swatch.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0, W, H);
+    const px = ctx.getImageData(0, 0, W, H).data;
+    const bins = Array.from({ length: 24 }, () => ({ w: 0, x: 0, y: 0, s: 0, l: 0 }));
+    for (let i = 0; i < px.length; i += 4) {
+      const r = px[i] / 255, g = px[i + 1] / 255, b = px[i + 2] / 255;
+      const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2, d = max - min;
+      if (d < 0.06 || l < 0.1 || l > 0.92) continue;            // skip greys, near-black, near-white
+      const sat = d / (1 - Math.abs(2 * l - 1));
+      let h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+      h = (h * 60 + 360) % 360;
+      const w = sat * (1 - Math.abs(l - 0.5));                   // favour saturated mid-tones
+      const bin = bins[Math.floor(h / 15)];
+      bin.w += w; bin.x += Math.cos(h * Math.PI / 180) * w; bin.y += Math.sin(h * Math.PI / 180) * w;
+      bin.s += sat * w; bin.l += l * w;
+    }
+    const top = bins.reduce((a, c) => (c.w > a.w ? c : a));
+    if (!top.w) return null;
+    return { h: (Math.atan2(top.y, top.x) * 180 / Math.PI + 360) % 360, s: top.s / top.w, l: top.l / top.w };
+  } catch (e) { return null; }                                   // tainted canvas etc.
+}
+
 function show(idx) {
   const it = ITEMS[idx];
   const next = new Image();
+  next.crossOrigin = 'anonymous';
   next.onload = () => {
+    const color = embedded && next.crossOrigin ? pickColor(next) : null;
     pic.classList.remove('on');
     setTimeout(() => {
+      if (next.crossOrigin) pic.crossOrigin = 'anonymous'; else pic.removeAttribute('crossorigin');
       pic.src = it.img;
       pic.alt = it.cap;
       credit.href = it.src;
@@ -1672,9 +1704,14 @@ function show(idx) {
       const s = document.createElement('span'); s.className = 'src'; s.textContent = '· ' + it.srcName; credit.append(s);
       requestAnimationFrame(() => pic.classList.add('on'));
       loader.classList.add('done');
+      if (color) window.parent.postMessage({ type: 'greenshuffle:color', ...color, cap: it.cap }, '*');
     }, pic.src ? 200 : 0);
   };
-  next.onerror = () => { forward(); };   // skip dead links
+  next.onerror = () => {
+    // CORS refused: show it anyway without a color; otherwise the link is dead, skip it
+    if (next.crossOrigin) { next.removeAttribute('crossorigin'); next.crossOrigin = null; next.src = it.img; }
+    else forward();
+  };
   next.src = it.img;
 }
 
@@ -1683,7 +1720,7 @@ function forward() {
   else { history.push(draw()); pos = history.length - 1; }
   show(history[pos]);
   // warm the cache for the likely next one
-  if (bag.length) { const p = new Image(); p.src = ITEMS[bag[bag.length - 1]].img; }
+  if (bag.length) { const p = new Image(); p.crossOrigin = 'anonymous'; p.src = ITEMS[bag[bag.length - 1]].img; }
 }
 function back() { if (pos > 0) { pos--; show(history[pos]); } }
 
